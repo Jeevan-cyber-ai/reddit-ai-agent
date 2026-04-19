@@ -1,59 +1,263 @@
-# Reddit AI Digest - Stage 1 Backend
+# Reddit AI Digest
 
-## Overview
-This is a FastAPI-based backend designed to scrape Reddit posts and comments from specific financial subreddits, filter them using an AI-driven pipeline (Stage 1), and expose the high-quality results via a clean API.
+FastAPI backend that fetches top Reddit finance discussions, filters low-value posts with OpenAI, ranks the best posts per subreddit, performs a final global ranking, prints the result to console, and emails the final top 3.
 
-The primary goal of this Stage 1 system is to isolate meaningful financial discussions and identify actionable situations where a user is stuck or needs expert involvement.
+## What This Project Does
 
-## What is Completed So Far (Stage 1 Pipeline)
-- **Reddit Data Ingestion**: Automatically fetches top daily posts from configured subreddits (`r/indiainvestments`, `r/FIRE_IND`, `r/personalfinanceindia`).
-- **Comment Fetching & Cleaning**: Grabs the top 5 direct replies to each post, cleans the text, and filters out noise (e.g., `[deleted]`, `[removed]`, or very short low-effort comments).
-- **Stage 1 AI Filtering (OpenAI)**: Evaluates the fetched posts and their comments using `gpt-4o-mini`. It aggressively filters out memes, jokes, and low-effort posts, keeping only meaningful discussions.
-- **Actionable Decision Flagging**: The AI explicitly looks for "incomplete decisions" (e.g., someone asking for financial advice, evaluating insurance, or stating they are stuck). It flags these posts with `involvement_needed: true` and extracts the specific questions into an `actionable_comments` array.
-- **FastAPI Endpoints**: A set of endpoints to test the raw scraper and the AI pipeline.
+The pipeline currently works in these stages:
+
+1. Fetch top daily Reddit posts from the configured subreddits.
+2. Fetch and clean a small number of top comments for each post.
+3. Stage 1: use OpenAI to filter out noisy, low-value, or irrelevant discussions.
+4. Stage 2: rank the validated posts separately for each subreddit and keep the top 3.
+5. Stage 3: merge the subreddit winners and select the final top 3 overall.
+6. Print the final output in the console.
+7. Send the same final output by email.
 
 ## Project Structure
-- `app/main.py`: FastAPI application setup and API endpoints.
-- `app/config/settings.py`: Application configuration (Target subreddits, API limits, OpenAI config).
-- `app/models/post_models.py`: Pydantic models defining the data structure (`RawPost`, `Stage1Post`).
-- `app/services/reddit/`: Logic for querying the public Reddit JSON API and parsing the data.
-- `app/services/ai/`: Logic for interacting with the OpenAI API and the `filter_prompt.txt`.
-- `app/utils/`: Helper functions (e.g., JSON validation, comment cleaning).
 
-## Setup & Running Locally
+- `app/main.py` - FastAPI app and pipeline endpoints.
+- `app/config/settings.py` - Application settings loaded from `.env`.
+- `app/models/post_models.py` - Pydantic models for raw, filtered, and ranked posts.
+- `app/services/reddit/` - Reddit API fetching and comment cleanup.
+- `app/services/ai/` - OpenAI client, prompts, Stage 1 filter, Stage 2 ranking, Stage 3 ranking.
+- `app/services/notifications/email_sender.py` - Gmail SMTP email sender.
+- `app/utils/output_formatter.py` - Shared console/email formatting.
+- `app/utils/validate_ai_output.py` - JSON validation helpers for AI responses.
 
-1. Create and activate a virtual environment:
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\activate
-   ```
+## Requirements
 
-2. Install dependencies:
-   ```powershell
-   pip install -r requirements.txt
-   ```
+- Python 3.11 or newer recommended.
+- A Reddit-friendly internet connection.
+- OpenAI API key.
+- Gmail account with 2-Step Verification enabled and an App Password created.
 
-3. Set up your environment variables by creating a `.env` file in the root directory:
-   ```env
-   OPENAI_API_KEY=your_openai_api_key_here
-   ```
+## Setup
 
-4. Start the FastAPI server:
-   ```powershell
-   uvicorn app.main:app --reload
-   ```
+### 1. Clone the repository
 
-5. View the interactive Swagger API documentation at: `http://127.0.0.1:8000/docs`
+```powershell
+git clone https://github.com/Jeevan-cyber-ai/reddit-ai-agent.git
+cd reddit-ai-agent
+```
+
+### 2. Create a virtual environment
+
+Windows:
+
+```powershell
+python -m venv venv
+```
+
+macOS/Linux:
+
+```bash
+python3 -m venv venv
+```
+
+### 3. Activate the virtual environment
+
+Windows PowerShell:
+
+```powershell
+.\venv\Scripts\activate
+```
+
+macOS/Linux:
+
+```bash
+source venv/bin/activate
+```
+
+### 4. Install dependencies
+
+```powershell
+pip install -r requirements.txt
+```
+
+### 5. Create the `.env` file
+
+Create a `.env` file in the project root and add:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4o-mini
+
+EMAIL_USER=your_gmail_address@gmail.com
+EMAIL_PASS=your_gmail_app_password
+EMAIL_RECEIVER=recipient_email@gmail.com
+```
+
+Notes:
+
+- `EMAIL_USER` and `EMAIL_RECEIVER` can be the same address if you want to send the digest to yourself.
+- Use a Gmail App Password, not your normal Gmail password.
+
+## Run the App
+
+Start the API:
+
+```powershell
+uvicorn app.main:app --reload
+```
+
+Open Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## Current Configuration
+
+The current settings file uses these subreddits:
+
+- `indiainvestments`
+- `FIRE_IND`
+- `personalfinanceindia`
+
+If you want to change them, edit `app/config/settings.py`.
 
 ## API Endpoints
-- `GET /raw-posts`: Fetches raw posts and comments from Reddit without applying any AI filtering.
-- `POST /run-stage1`: Fetches posts and runs them through the Stage 1 AI Filter, returning *only* the meaningful posts that were kept.
-- `GET /reddit-raw-json`: Utility endpoint that fetches the unparsed, raw JSON directly from Reddit.
-- `GET /filtered-posts`: Similar to `/run-stage1`, but exposed as a GET request.
 
-## Next Steps for Stage 2 Developer
-The Stage 1 pipeline is complete and effectively filtering out the noise. Your job is to pick up where Stage 1 left off.
+### GET `/raw-posts`
+Returns the raw normalized Reddit posts.
 
-- You will be consuming the `Stage1Post` JSON output.
-- Pay special attention to the `involvement_needed` flag and the `actionable_comments` list in the JSON response. These are highly qualified leads or situations where human intervention is explicitly requested.
-- Implement Stage 2 ranking, categorisation, and the final digest generation based on these filtered results.
+### GET `/filtered-posts`
+Runs Stage 1 filtering and returns only valuable posts.
+
+### GET `/reddit-raw-json`
+Returns the raw Reddit JSON payload for each configured subreddit.
+
+### POST `/run-stage1`
+Runs Stage 1 filtering only.
+
+### POST `/run-ranking-pipeline`
+Runs the full pipeline:
+
+1. Fetch raw posts
+2. Stage 1 validation/filtering
+3. Per-subreddit ranking
+4. Global ranking
+5. Console output
+6. Email delivery
+
+This endpoint returns diagnostic fields as well:
+
+- `stage1_count`
+- `stage1_by_subreddit`
+- `subreddit_rankings`
+- `ranking_error_by_subreddit`
+- `merged_count`
+- `final_count`
+- `final_top_posts`
+- `final_output_text`
+- `email_status`
+- `email_error`
+
+## Output Format
+
+The final console and email content are generated from one shared formatter and look like this:
+
+```text
+Top 3 Reddit Finance Insights
+================================
+Generated At: 2026-04-20 12:34 UTC
+
+Top 3 Posts:
+------------
+
+1.
+Title: ...
+URL: ...
+Summary: ...
+------------
+
+2.
+Title: ...
+URL: ...
+Summary: ...
+------------
+
+3.
+Title: ...
+URL: ...
+Summary: ...
+------------
+```
+
+## How To Verify It Is Working
+
+### 1. Check that the app starts
+
+```powershell
+uvicorn app.main:app --reload
+```
+
+You should see Uvicorn running at `http://127.0.0.1:8000`.
+
+### 2. Verify raw posts
+
+Use Swagger or run:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/raw-posts"
+```
+
+### 3. Verify Stage 1 filtering
+
+Use Swagger or run:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/filtered-posts"
+```
+
+### 4. Verify full ranking and email flow
+
+Use Swagger or run:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/run-ranking-pipeline" | ConvertTo-Json -Depth 8
+```
+
+Check the response for:
+
+- `status = success`
+- `final_count = 3` or fewer if there are not enough valid posts
+- `final_top_posts` with `title`, `url`, `summary`
+- `final_output_text` containing the formatted digest
+- `email_status = sent`
+
+If email fails, check `email_error`.
+
+## Debugging Notes
+
+### Stage 1 empty for a subreddit
+
+Check:
+
+- `stage1_by_subreddit`
+- `ranking_error_by_subreddit`
+
+Possible causes:
+
+- Reddit returned no posts for that subreddit.
+- Stage 1 filtered all posts out as low-value.
+- AI response was invalid or empty.
+
+### Email failure
+
+If you see a Gmail error like `Application-specific password required`, you need:
+
+1. 2-Step Verification enabled on the Gmail account.
+2. A Gmail App Password generated in Google Account settings.
+3. That App Password saved in `EMAIL_PASS` inside `.env`.
+
+## Notes for Contributors
+
+- The shared formatter in `app/utils/output_formatter.py` is used by both console printing and email body generation.
+- Keep AI responses strict JSON.
+- Keep endpoint responses backward-compatible unless you intentionally change the pipeline contract.
+
+## License
+
+No license has been declared yet.
