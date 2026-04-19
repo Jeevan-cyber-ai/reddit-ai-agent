@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from app.models.post_models import RawPost, Stage1Post
 from app.services.ai.ai_client import ai_client
 from app.utils.validate_ai_output import validate_json_output
@@ -12,12 +13,22 @@ async def filter_posts(posts: list[RawPost]) -> list[Stage1Post]:
     """
     if not posts:
         return []
-        
-    with open("app/services/ai/prompts/filter_prompt.txt", "r", encoding="utf-8") as f:
+
+    prompt_path = Path(__file__).resolve().parent / "prompts" / "filter_prompt.txt"
+    with prompt_path.open("r", encoding="utf-8") as f:
         system_prompt = f.read()
         
     # Build a lookup for metadata by title so AI output can be matched back
-    post_meta = {p.title: {"post_id": p.post_id, "url": p.url, "subreddit": p.subreddit} for p in posts}
+    post_meta = {
+        p.title: {
+            "post_id": p.post_id,
+            "url": p.url,
+            "subreddit": p.subreddit,
+            "score": p.score,
+            "comments": p.comments,
+        }
+        for p in posts
+    }
 
     # Prepare input for AI
     ai_input_data = []
@@ -45,22 +56,35 @@ async def filter_posts(posts: list[RawPost]) -> list[Stage1Post]:
                 try:
                     title = item.get("title", "")
                     meta = post_meta.get(title, {})
-                    stage1_posts.append(Stage1Post(
+                    is_valuable = item.get("is_valuable")
+                    if is_valuable is None:
+                        is_valuable = item.get("keep")
+                    if is_valuable is None:
+                        # Backward compatibility: if the model only returns kept items,
+                        # treat each returned item as valuable.
+                        is_valuable = True
+                    stage1_post = Stage1Post(
                         post_id=meta.get("post_id", ""),
                         title=title,
                         content=item.get("content", ""),
+                        score=item.get("score", meta.get("score", 0)),
                         url=meta.get("url", ""),
                         subreddit=meta.get("subreddit", ""),
-                        comments=item.get("comments", []),
-                        keep=True,
+                        comments=item.get("comments", meta.get("comments", [])),
+                        is_valuable=is_valuable,
+                        keep=is_valuable,
                         reason=item.get("reason", ""),
+                        category=item.get("category", ""),
+                        comment_assessment=item.get("comment_assessment", ""),
                         involvement_needed=item.get("involvement_needed", False),
                         actionable_comments=item.get("actionable_comments", [])
-                    ))
+                    )
+                    if stage1_post.is_valuable:
+                        stage1_posts.append(stage1_post)
                 except Exception as e:
                     logger.error(f"Error parsing AI output item to Stage1Post model: {e}")
             
-            logger.info(f"Stage 1 filtering complete. Kept {len(stage1_posts)} posts.")
+            logger.info(f"Stage 1 filtering complete. Kept {len(stage1_posts)} posts after comment-based validation.")
             return stage1_posts
             
         logger.warning(f"Stage 1 AI output invalid. Attempt {attempt + 1} of {max_retries}. Retrying...")

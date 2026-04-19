@@ -8,12 +8,17 @@ class Settings(BaseSettings):
         "FIRE_IND",
         "personalfinanceindia"
     ]
-    POST_LIMIT: int = 5
+    POST_LIMIT: int = 10
     COMMENT_LIMIT: int = 5
 
     # OpenAI config
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # Email config
+    EMAIL_USER: str = ""
+    EMAIL_PASS: str = ""
+    EMAIL_RECEIVER: str = ""
 
     model_config = {
         "env_file": ".env",
