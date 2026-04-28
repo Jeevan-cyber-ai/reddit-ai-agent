@@ -19,10 +19,12 @@ async def filter_posts(posts: list[RawPost]) -> list[Stage1Post]:
     with prompt_path.open("r", encoding="utf-8") as f:
         system_prompt = f.read()
         
-    # Build a lookup for metadata by title so AI output can be matched back
+    # Build lookups so AI output can be matched back reliably.
     post_meta = {
-        p.title: {
+        p.post_id: {
             "post_id": p.post_id,
+            "title": p.title,
+            "content": p.content,
             "url": p.url,
             "subreddit": p.subreddit,
             "score": p.score,
@@ -35,10 +37,10 @@ async def filter_posts(posts: list[RawPost]) -> list[Stage1Post]:
     ai_input_data = []
     for post in posts:
         ai_input_data.append({
+            "post_id": post.post_id,
             "title": post.title,
             "content": post.content,
             "score": post.score,
-            "comments": post.comments
         })
         
     user_content = json.dumps(ai_input_data, indent=2)
@@ -55,8 +57,11 @@ async def filter_posts(posts: list[RawPost]) -> list[Stage1Post]:
             stage1_posts = []
             for item in parsed_json:
                 try:
+                    post_id = item.get("post_id", "")
                     title = item.get("title", "")
-                    meta = post_meta.get(title, {})
+                    meta = post_meta.get(post_id, {})
+                    if not meta and title:
+                        meta = next((value for value in post_meta.values() if value.get("title") == title), {})
                     is_valuable = item.get("is_valuable")
                     if is_valuable is None:
                         is_valuable = item.get("keep")
@@ -66,7 +71,7 @@ async def filter_posts(posts: list[RawPost]) -> list[Stage1Post]:
                         is_valuable = True
                     stage1_post = Stage1Post(
                         post_id=meta.get("post_id", ""),
-                        title=title,
+                        title=meta.get("title", title),
                         content=meta.get("content", ""),
                         score=meta.get("score", 0),
                         url=meta.get("url", ""),

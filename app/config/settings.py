@@ -5,9 +5,11 @@ from typing import List
 class Settings(BaseSettings):
     # Reddit config
     SUBREDDITS: List[str] = [
-        "indiainvestments",
-        "FIRE_IND",
-        "personalfinanceindia"
+        "MutualfundsIndia",
+        "personalfinanceindia",
+        "IndiaInvestments",
+        "FIREIndia",
+        "fatFIREIndia"
     ]
     POST_LIMIT: int = 10
     COMMENT_LIMIT: int = 5

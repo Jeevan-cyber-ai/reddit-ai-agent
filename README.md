@@ -7,19 +7,18 @@ FastAPI backend that fetches top Reddit finance discussions, filters low-value p
 The pipeline currently works in these stages:
 
 1. Fetch top daily Reddit posts from the configured subreddits.
-2. Fetch and clean a small number of top comments for each post.
-3. Stage 1: use OpenAI to filter out noisy, low-value, or irrelevant discussions.
-4. Stage 2: rank the validated posts separately for each subreddit and keep the top 3.
-5. Stage 3: merge the subreddit winners and select the final top 3 overall.
-6. Print the final output in the console.
-7. Send the same final output by email.
+2. Stage 1: use OpenAI to filter out noisy, low-value, or irrelevant discussions.
+3. Stage 2: rank the validated posts separately for each subreddit and keep the top 3.
+4. Stage 3: merge the subreddit winners and select the final top 3 overall.
+5. Print the final output in the console.
+6. Send the same final output by email.
 
 ## Project Structure
 
 - `app/main.py` - FastAPI app and pipeline endpoints.
 - `app/config/settings.py` - Application settings loaded from `.env`.
 - `app/models/post_models.py` - Pydantic models for raw, filtered, and ranked posts.
-- `app/services/reddit/` - Reddit API fetching and comment cleanup.
+- `app/services/reddit/` - Reddit API fetching and post normalization.
 - `app/services/ai/` - OpenAI client, prompts, Stage 1 filter, Stage 2 ranking, Stage 3 ranking.
 - `app/services/notifications/email_sender.py` - Gmail SMTP email sender.
 - `app/utils/output_formatter.py` - Shared console/email formatting.
@@ -111,9 +110,11 @@ http://127.0.0.1:8000/docs
 
 The current settings file uses these subreddits:
 
-- `indiainvestments`
-- `FIRE_IND`
+- `MutualfundsIndia`
 - `personalfinanceindia`
+- `IndiaInvestments`
+- `FIREIndia`
+- `fatFIREIndia`
 
 If you want to change them, edit `app/config/settings.py`.
 
@@ -227,6 +228,29 @@ Check the response for:
 - `final_output_text` containing the formatted digest
 - `email_status = sent`
 
+## Prompt Contract
+
+The AI prompts now use strict JSON schemas to keep the pipeline deterministic.
+
+### Stage 1 filter output
+
+Each item should include:
+
+- `post_id`
+- `title`
+- `is_valuable`
+- `category`
+- `reason`
+
+### Ranking output
+
+Stage 2 and Stage 3 both expect:
+
+- `top_posts`
+- each entry containing `title`, `url`, and `summary`
+
+The ranking prompts are tuned for the five supported subreddits and enforce `https://` URLs in the output.
+
 If email fails, check `email_error`.
 
 ## Debugging Notes
@@ -257,6 +281,7 @@ If you see a Gmail error like `Application-specific password required`, you need
 - The shared formatter in `app/utils/output_formatter.py` is used by both console printing and email body generation.
 - Keep AI responses strict JSON.
 - Keep endpoint responses backward-compatible unless you intentionally change the pipeline contract.
+- The Reddit fetch layer currently normalizes post content only; it does not fetch comments for Stage 1.
 
 ## License
 
