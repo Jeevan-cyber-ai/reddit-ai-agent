@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 import httpx
 import asyncio
+import logging
+import time
 from app.services.reddit.fetch_posts import fetch_top_posts
 from app.services.ai.stage1_filter import filter_posts
 from app.services.ai.stage2_subreddit_ranker import rank_subreddit_posts
@@ -8,6 +10,9 @@ from app.services.ai.stage3_global_ranker import rank_global_posts
 from app.services.notifications.email_sender import send_results_email
 from app.utils.output_formatter import format_top_posts_text
 from app.config.settings import settings
+
+# Configure root logger so all loggers output properly
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 
 app = FastAPI(title="Reddit AI Digest - Stage 1", description="API to fetch and filter Reddit posts.")
 
@@ -26,12 +31,21 @@ async def get_filtered_posts():
     the Stage 1 AI filter. Returns only meaningful discussions, with Reddit
     URLs and subreddit names included.
     """
+    t0 = time.time()
+    print(">>> /filtered-posts: Fetching raw posts from Reddit...", flush=True)
     raw_posts = await fetch_top_posts()
+    t1 = time.time()
+    print(f">>> /filtered-posts: Fetched {len(raw_posts)} posts in {t1-t0:.1f}s", flush=True)
 
     if not raw_posts:
         return {"status": "error", "message": "No posts fetched from Reddit."}
 
+    print(f">>> /filtered-posts: Sending {len(raw_posts)} posts to AI filter...", flush=True)
     filtered_posts = await filter_posts(raw_posts)
+    t2 = time.time()
+    print(f">>> /filtered-posts: AI filter done in {t2-t1:.1f}s — kept {len(filtered_posts)} posts", flush=True)
+    print(f">>> /filtered-posts: Total time: {t2-t0:.1f}s", flush=True)
+
     return {
         "status": "success",
         "count": len(filtered_posts),

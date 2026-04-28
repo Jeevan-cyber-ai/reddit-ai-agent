@@ -1,4 +1,5 @@
-from pydantic_settings import BaseSettings
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 class Settings(BaseSettings):
@@ -20,10 +21,10 @@ class Settings(BaseSettings):
     EMAIL_PASS: str = ""
     EMAIL_RECEIVER: str = ""
 
-    model_config = {
-        "env_file": ".env",
-        "extra": "ignore"
-    }
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parent.parent.parent / ".env",
+        extra="ignore"
+    )
 
 
 settings = Settings()

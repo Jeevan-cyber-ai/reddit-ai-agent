@@ -25,7 +25,6 @@ async def rank_subreddit_posts(subreddit: str, posts: list[Stage1Post]) -> list[
         ai_input.append(
             {
                 "title": post.title,
-                "content": post.content,
                 "score": post.score,
                 "url": post.url,
                 "reason": post.reason,

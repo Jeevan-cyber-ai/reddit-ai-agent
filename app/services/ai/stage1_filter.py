@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from pathlib import Path
 from app.models.post_models import RawPost, Stage1Post
 from app.services.ai.ai_client import ai_client
@@ -66,11 +67,11 @@ async def filter_posts(posts: list[RawPost]) -> list[Stage1Post]:
                     stage1_post = Stage1Post(
                         post_id=meta.get("post_id", ""),
                         title=title,
-                        content=item.get("content", ""),
-                        score=item.get("score", meta.get("score", 0)),
+                        content=meta.get("content", ""),
+                        score=meta.get("score", 0),
                         url=meta.get("url", ""),
                         subreddit=meta.get("subreddit", ""),
-                        comments=item.get("comments", meta.get("comments", [])),
+                        comments=meta.get("comments", []),
                         is_valuable=is_valuable,
                         keep=is_valuable,
                         reason=item.get("reason", ""),

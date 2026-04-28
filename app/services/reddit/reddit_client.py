@@ -14,10 +14,13 @@ HEADERS = {
     "Referer": "https://www.reddit.com/",
 }
 
+# Allow up to 3 concurrent Reddit requests — enough parallelism without triggering 429
+_request_semaphore = asyncio.Semaphore(3)
+
 async def reddit_get(path: str, params: dict = None) -> dict | list:
     """
     Makes a GET request to Reddit's public JSON API.
-    Adds a small delay to avoid rate limiting (Reddit allows ~60 req/min).
+    Uses a semaphore to limit concurrency and exponential backoff on 429.
     `path` example: '/r/FIRE_IND/top.json'
     """
     if params is None:
@@ -25,24 +28,34 @@ async def reddit_get(path: str, params: dict = None) -> dict | list:
     params["raw_json"] = 1  # Prevents Reddit from HTML-encoding characters
 
     url = f"{BASE_URL}{path}"
+    max_retries = 3
 
-    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-        # Small delay to be polite and avoid 429/403 rate limits
-        await asyncio.sleep(0.1)
-        try:
-            response = await client.get(url, params=params, timeout=15.0)
-            if response.status_code == 403:
-                logger.warning(f"403 Blocked for {url} — subreddit may be private or restricted.")
-                return {}
-            if response.status_code == 429:
-                logger.warning(f"429 Rate limited for {url}. Waiting 5s and retrying...")
-                await asyncio.sleep(5)
-                response = await client.get(url, params=params, timeout=15.0)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error for {url}: {e}")
-            return {}
-        except Exception as e:
-            logger.error(f"Request failed for {url}: {e}")
-            return {}
+    async with _request_semaphore:
+        async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
+            for attempt in range(max_retries + 1):
+                try:
+                    logger.debug(f"GET {url} (attempt {attempt + 1})")
+                    response = await client.get(url, params=params, timeout=15.0)
+
+                    if response.status_code == 403:
+                        logger.warning(f"403 Blocked for {url} — subreddit may be private or restricted.")
+                        return {}
+
+                    if response.status_code == 429:
+                        wait = 5 * (2 ** attempt)  # 5s, 10s, 20s
+                        logger.warning(f"429 Rate limited for {url}. Waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
+                        await asyncio.sleep(wait)
+                        continue
+
+                    response.raise_for_status()
+                    return response.json()
+
+                except httpx.HTTPStatusError as e:
+                    logger.error(f"HTTP error for {url}: {e}")
+                    return {}
+                except Exception as e:
+                    logger.error(f"Request failed for {url}: {e}")
+                    return {}
+
+    logger.error(f"All retries exhausted for {url}")
+    return {}
