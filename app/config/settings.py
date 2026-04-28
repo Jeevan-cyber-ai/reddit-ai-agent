@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     ]
     POST_LIMIT: int = 10
     COMMENT_LIMIT: int = 5
+    
+    # Schedule config (24-hour format HH:MM)
+    PIPELINE_SCHEDULE_TIME: str = "22:05"
 
     # OpenAI config
     OPENAI_API_KEY: str = ""
@@ -21,7 +24,7 @@ class Settings(BaseSettings):
     # Email config
     EMAIL_USER: str = ""
     EMAIL_PASS: str = ""
-    EMAIL_RECEIVER: str = ""
+    EMAIL_RECEIVER: str = "anishaak06@gmail.com, jeevaneniyavan@gmail.com"
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parent.parent.parent / ".env",
